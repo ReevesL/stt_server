@@ -1,0 +1,15 @@
+services:
+  stt-server:
+    build: .
+    runtime: nvidia
+    ports:
+      - "8001:8000"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - HF_TOKEN=${HF_TOKEN}
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    restart: unless-stopped
+
+volumes:
+  hf_cache:

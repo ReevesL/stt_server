@@ -1,0 +1,4 @@
+.env
+hugging_face_token.md
+__pycache__/
+*.pyc
