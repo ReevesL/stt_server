@@ -1,6 +1,6 @@
 services:
   stt-server:
-    build: .
+    image: gitea.little.local:30380/reeves/stt_server:latest
     runtime: nvidia
     ports:
       - "8001:8000"
