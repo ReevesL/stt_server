@@ -23,7 +23,7 @@ jobs:
       - name: Configure registry credentials
         run: |
           mkdir -p ~/.docker
-          echo '{"auths":{"gitea.little.local:30380":{"auth":"'"$(echo -n "${{ gitea.actor }}:${{ secrets.REGISTRY_TOKEN }}" | base64)"'"}}}' > ~/.docker/config.json
+          echo '{"auths":{"gitea.little.local:30380":{"auth":"'"$(echo -n "${{ gitea.actor }}:${{ secrets.REGISTRY_TOKEN }}" | base64 -w 0)"'"}}}' > ~/.docker/config.json
 
       - name: Build and push
         uses: docker/build-push-action@v5
