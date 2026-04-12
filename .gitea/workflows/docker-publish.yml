@@ -33,3 +33,5 @@ jobs:
           tags: |
             gitea.little.local:30380/reeves/stt_server:latest
             gitea.little.local:30380/reeves/stt_server:${{ gitea.sha }}
+          cache-from: type=registry,ref=gitea.little.local:30380/reeves/stt_server:buildcache
+          cache-to: type=registry,ref=gitea.little.local:30380/reeves/stt_server:buildcache,mode=max
