@@ -1,6 +1,6 @@
-FROM python:3.10-slim
+FROM gitea.little.local:30380/reeves/stt_server:torch
 
-RUN pip install --no-cache-dir fastapi uvicorn python-multipart
+RUN pip3 install --no-cache-dir whisperx fastapi uvicorn python-multipart
 
 WORKDIR /app
 COPY app/ .

@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  build-and-push:
+  build-base:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,7 +27,71 @@ jobs:
           username: ${{ gitea.actor }}
           password: ${{ secrets.REGISTRY_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push base image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.base
+          push: true
+          tags: gitea.little.local:30380/reeves/stt_server:base
+          cache-from: type=registry,ref=gitea.little.local:30380/reeves/stt_server:buildcache-base
+          cache-to: type=registry,ref=gitea.little.local:30380/reeves/stt_server:buildcache-base,mode=max
+
+  build-torch:
+    needs: build-base
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [registry."gitea.little.local:30380"]
+              http = true
+              insecure = true
+
+      - name: Log in to Gitea container registry
+        uses: docker/login-action@v3
+        with:
+          registry: gitea.little.local:30380
+          username: ${{ gitea.actor }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      - name: Build and push torch image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.torch
+          push: true
+          tags: gitea.little.local:30380/reeves/stt_server:torch
+          cache-from: type=registry,ref=gitea.little.local:30380/reeves/stt_server:buildcache-torch
+          cache-to: type=registry,ref=gitea.little.local:30380/reeves/stt_server:buildcache-torch,mode=max
+
+  build-app:
+    needs: build-torch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [registry."gitea.little.local:30380"]
+              http = true
+              insecure = true
+
+      - name: Log in to Gitea container registry
+        uses: docker/login-action@v3
+        with:
+          registry: gitea.little.local:30380
+          username: ${{ gitea.actor }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      - name: Build and push app image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -35,5 +99,5 @@ jobs:
           tags: |
             gitea.little.local:30380/reeves/stt_server:latest
             gitea.little.local:30380/reeves/stt_server:${{ gitea.sha }}
-          cache-from: type=registry,ref=gitea.little.local:30380/reeves/stt_server:buildcache
-          cache-to: type=registry,ref=gitea.little.local:30380/reeves/stt_server:buildcache,mode=max
+          cache-from: type=registry,ref=gitea.little.local:30380/reeves/stt_server:buildcache-app
+          cache-to: type=registry,ref=gitea.little.local:30380/reeves/stt_server:buildcache-app,mode=max
