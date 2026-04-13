@@ -1,4 +1,3 @@
-# Build and Publish Docker Image
 name: Build and Publish Docker Image
 
 on:
@@ -21,10 +20,12 @@ jobs:
               http = true
               insecure = true
 
-      - name: Configure registry credentials
-        run: |
-          mkdir -p ~/.docker
-          echo '{"auths":{"gitea.little.local:30380":{"auth":"'"$(echo -n "${{ gitea.actor }}:${{ secrets.REGISTRY_TOKEN }}" | base64 -w 0)"'"}}}' > ~/.docker/config.json
+      - name: Log in to Gitea container registry
+        uses: docker/login-action@v3
+        with:
+          registry: gitea.little.local:30380
+          username: ${{ gitea.actor }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
 
       - name: Build and push
         uses: docker/build-push-action@v5
