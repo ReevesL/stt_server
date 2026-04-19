@@ -12,8 +12,8 @@ import whisperx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 HF_TOKEN = os.environ["HF_TOKEN"]
-DEVICE = "cuda"
-COMPUTE_TYPE = "float16"
+DEVICE = "cpu"
+COMPUTE_TYPE = "int8"
 
 executor = ThreadPoolExecutor(max_workers=1)
 jobs: dict[str, dict] = {}
@@ -38,9 +38,9 @@ def run_whisperx(audio_path: str, min_speakers: Optional[int], max_speakers: Opt
     if max_speakers is not None:
         diarize_kwargs["max_speakers"] = max_speakers
 
-    diarize_model = whisperx.DiarizationPipeline(use_auth_token=HF_TOKEN, device=DEVICE)
+    diarize_model = whisperx.diarize.DiarizationPipeline(token=HF_TOKEN, device=DEVICE)
     diarize_segments = diarize_model(audio, **diarize_kwargs)
-    result = whisperx.assign_word_speakers(diarize_segments, result)
+    result = whisperx.diarize.assign_word_speakers(diarize_segments, result)
 
     return result
 
