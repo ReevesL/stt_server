@@ -7,6 +7,8 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - HF_TOKEN=${HF_TOKEN}
+      - CPU_THREADS=${CPU_THREADS:-0}
+      - MAX_WORKERS=${MAX_WORKERS:-1}
     volumes:
       - hf_cache:/root/.cache/huggingface
     restart: unless-stopped

@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
+import torch
 import whisperx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
@@ -15,13 +16,22 @@ HF_TOKEN = os.environ["HF_TOKEN"]
 DEVICE = "cpu"
 COMPUTE_TYPE = "int8"
 
-executor = ThreadPoolExecutor(max_workers=1)
+CPU_THREADS = int(os.environ.get("CPU_THREADS", 0)) or None
+MAX_WORKERS = int(os.environ.get("MAX_WORKERS", 1))
+
+if CPU_THREADS:
+    torch.set_num_threads(CPU_THREADS)
+
+executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 jobs: dict[str, dict] = {}
 job_queue: asyncio.Queue = None
 
 
 def run_whisperx(audio_path: str, min_speakers: Optional[int], max_speakers: Optional[int]) -> dict:
-    model = whisperx.load_model("large-v3", DEVICE, compute_type=COMPUTE_TYPE)
+    model_kwargs = {"compute_type": COMPUTE_TYPE}
+    if CPU_THREADS:
+        model_kwargs["num_workers"] = CPU_THREADS
+    model = whisperx.load_model("large-v3", DEVICE, **model_kwargs)
     audio = whisperx.load_audio(audio_path)
     result = model.transcribe(audio, batch_size=16)
     del model
