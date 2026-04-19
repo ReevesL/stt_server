@@ -1,4 +1,4 @@
-FROM gitea.little.local:30380/reeves/stt_server:torch
+FROM ghcr.io/reevesl/stt_server:torch
 
 RUN pip3 install --no-cache-dir whisperx fastapi uvicorn python-multipart
 
