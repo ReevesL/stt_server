@@ -17,3 +17,6 @@ __pycache__/
 
 # Logs
 logs/
+
+# transcripts
+meeting_transcriptions/
