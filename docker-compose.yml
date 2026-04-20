@@ -1,6 +1,6 @@
 services:
   stt-server:
-    image: ghcr.io/reevesl/stt_server:1.3.0
+    image: ghcr.io/reevesl/stt_server:1.4.0
     ports:
       - "8001:8000"
     environment:

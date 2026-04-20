@@ -273,7 +273,9 @@ async def job_worker():
             identified_names = set(speaker_mapping.values())
             transcript_text = build_transcript_text(result["segments"], identified=identified_names)
             stem = Path(original_filename).stem if original_filename else job_id
-            speakers_detected = len({seg.get("speaker") for seg in result["segments"] if seg.get("speaker")})
+            all_speaker_ids = sorted({seg.get("speaker") for seg in result["segments"] if seg.get("speaker")})
+            speakers_detected = len(all_speaker_ids)
+            speaker_map = {sp: speaker_mapping.get(sp, sp) for sp in all_speaker_ids}
 
             log_data = {
                 "job_id": job_id,
@@ -297,16 +299,30 @@ async def job_worker():
                 "text": transcript_text,
                 "processing_time": f"{elapsed:.1f}s",
                 "speakers_detected": speakers_detected,
-                "speakers_identified": speaker_mapping,
+                "speaker_map": speaker_map,
                 "files": str(job_dir),
             }
             if webhook_url:
-                await loop.run_in_executor(None, fire_webhook, webhook_url, {"job_id": job_id, **jobs[job_id]}, webhook_auth)
+                payload = {
+                    "job_id": job_id,
+                    "status": "done",
+                    "filename": original_filename,
+                    "processing_time": f"{elapsed:.1f}s",
+                    "text": transcript_text,
+                    "speaker_map": speaker_map,
+                }
+                await loop.run_in_executor(None, fire_webhook, webhook_url, payload, webhook_auth)
         except Exception as e:
             jobs[job_id]["status"] = "error"
             jobs[job_id]["error"] = str(e)
             if webhook_url:
-                await loop.run_in_executor(None, fire_webhook, webhook_url, {"job_id": job_id, **jobs[job_id]}, webhook_auth)
+                payload = {
+                    "job_id": job_id,
+                    "status": "error",
+                    "filename": original_filename,
+                    "error": str(e),
+                }
+                await loop.run_in_executor(None, fire_webhook, webhook_url, payload, webhook_auth)
         finally:
             if os.path.exists(audio_path):
                 os.unlink(audio_path)
@@ -328,7 +344,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="STT Server", lifespan=lifespan)
 
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 
 @app.get("/version")
