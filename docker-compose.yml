@@ -11,8 +11,10 @@ services:
       - RETENTION_DAYS=2
     volumes:
       - hf_cache:/root/.cache/huggingface
+      - transcripts:/app/transcripts
       - /mnt/stor3/stt_files:/mnt/stt_files
     restart: unless-stopped
 
 volumes:
   hf_cache:
+  transcripts:
