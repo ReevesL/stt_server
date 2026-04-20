@@ -301,6 +301,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="STT Server", lifespan=lifespan)
 
 
+VERSION = "1.1.0"
+
+
+@app.get("/version")
+def version():
+    return {"version": VERSION}
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "queued": job_queue.qsize() if job_queue else 0}
