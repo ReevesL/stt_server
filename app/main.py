@@ -20,7 +20,9 @@ _omp_threads = int(os.environ.get("OMP_NUM_THREADS", 0))
 if _omp_threads:
     torch.set_num_threads(_omp_threads)
 
-executor = ThreadPoolExecutor(max_workers=2)
+MAX_WORKERS = int(os.environ.get("MAX_WORKERS", 1))
+
+executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 jobs: dict[str, dict] = {}
 job_queue: asyncio.Queue = None
 

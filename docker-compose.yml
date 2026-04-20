@@ -6,6 +6,7 @@ services:
     environment:
       - HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxx
       - OMP_NUM_THREADS=12
+      - MAX_WORKERS=2
     volumes:
       - hf_cache:/root/.cache/huggingface
     restart: unless-stopped
