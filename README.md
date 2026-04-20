@@ -130,7 +130,7 @@ Enroll a speaker so they are automatically identified in future transcriptions. 
 ```bash
 curl -X POST http://your-server:8001/enroll \
   -F "file=@/path/to/my-voice.m4a" \
-  -F "name=Reeves"
+  -F "name=John"
 ```
 
 List enrolled speakers:

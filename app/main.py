@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+import base64
 import urllib.request
 import numpy as np
 import torch
@@ -36,6 +37,12 @@ RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", 2))
 ENROLLMENT_THRESHOLD = float(os.environ.get("ENROLLMENT_THRESHOLD", "0.75"))
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
 WEBHOOK_ENABLED = os.environ.get("WEBHOOK_ENABLED", "true").lower() == "true"
+_webhook_user = os.environ.get("WEBHOOK_USERNAME", "")
+_webhook_pass = os.environ.get("WEBHOOK_PASSWORD", "")
+WEBHOOK_AUTH_TOKEN = (
+    base64.b64encode(f"{_webhook_user}:{_webhook_pass}".encode()).decode()
+    if _webhook_user and _webhook_pass else None
+)
 WHISPER_SAMPLE_RATE = 16000
 
 LOCAL_TRANSCRIPT_PATH.mkdir(parents=True, exist_ok=True)
@@ -231,9 +238,12 @@ def cleanup_old_transcripts():
             shutil.rmtree(job_dir, ignore_errors=True)
 
 
-def fire_webhook(url: str, payload: dict):
+def fire_webhook(url: str, payload: dict, auth_token: Optional[str] = None):
     data = json.dumps(payload).encode()
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    headers = {"Content-Type": "application/json"}
+    if auth_token:
+        headers["Authorization"] = f"Basic {auth_token}"
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=10):
             pass
@@ -250,7 +260,7 @@ async def cleanup_loop():
 async def job_worker():
     loop = asyncio.get_event_loop()
     while True:
-        job_id, audio_path, original_filename, min_speakers, max_speakers, webhook_url = await job_queue.get()
+        job_id, audio_path, original_filename, min_speakers, max_speakers, webhook_url, webhook_auth = await job_queue.get()
         jobs[job_id]["status"] = "processing"
         jobs[job_id]["started_at"] = time.time()
         started_at = datetime.utcnow().isoformat()
@@ -291,12 +301,12 @@ async def job_worker():
                 "files": str(job_dir),
             }
             if webhook_url:
-                await loop.run_in_executor(None, fire_webhook, webhook_url, {"job_id": job_id, **jobs[job_id]})
+                await loop.run_in_executor(None, fire_webhook, webhook_url, {"job_id": job_id, **jobs[job_id]}, webhook_auth)
         except Exception as e:
             jobs[job_id]["status"] = "error"
             jobs[job_id]["error"] = str(e)
             if webhook_url:
-                await loop.run_in_executor(None, fire_webhook, webhook_url, {"job_id": job_id, **jobs[job_id]})
+                await loop.run_in_executor(None, fire_webhook, webhook_url, {"job_id": job_id, **jobs[job_id]}, webhook_auth)
         finally:
             if os.path.exists(audio_path):
                 os.unlink(audio_path)
@@ -318,7 +328,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="STT Server", lifespan=lifespan)
 
 
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 
 
 @app.get("/version")
@@ -337,6 +347,7 @@ async def transcribe(
     min_speakers: Optional[int] = Form(None),
     max_speakers: Optional[int] = Form(None),
     webhook_url: Optional[str] = Form(None),
+    webhook_auth_token: Optional[str] = Form(None),
 ):
     job_id = str(uuid.uuid4())
     suffix = os.path.splitext(file.filename or "")[1] or ".audio"
@@ -350,10 +361,15 @@ async def transcribe(
         os.unlink(tmp.name)
         raise HTTPException(status_code=500, detail="Failed to write uploaded file")
 
-    effective_webhook = webhook_url or (WEBHOOK_URL if WEBHOOK_ENABLED else None)
+    if webhook_url:
+        effective_webhook = webhook_url
+        effective_auth = webhook_auth_token
+    else:
+        effective_webhook = WEBHOOK_URL if WEBHOOK_ENABLED else None
+        effective_auth = WEBHOOK_AUTH_TOKEN
 
     jobs[job_id] = {"status": "queued", "filename": file.filename}
-    await job_queue.put((job_id, tmp.name, file.filename, min_speakers, max_speakers, effective_webhook))
+    await job_queue.put((job_id, tmp.name, file.filename, min_speakers, max_speakers, effective_webhook, effective_auth))
 
     return {"job_id": job_id, "status": "queued"}
 

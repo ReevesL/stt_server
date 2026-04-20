@@ -11,6 +11,8 @@ services:
       - RETENTION_DAYS=2
       - WEBHOOK_URL=
       - WEBHOOK_ENABLED=false
+      - WEBHOOK_USERNAME=
+      - WEBHOOK_PASSWORD=
     volumes:
       - hf_cache:/root/.cache/huggingface
       - transcripts:/app/transcripts
