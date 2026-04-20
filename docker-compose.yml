@@ -1,11 +1,9 @@
 services:
   stt-server:
     image: ghcr.io/reevesl/stt_server:latest
-    runtime: nvidia
     ports:
       - "8001:8000"
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
       - HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxx
       - CPU_THREADS=12
       - MAX_WORKERS=2
