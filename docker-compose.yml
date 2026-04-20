@@ -7,6 +7,7 @@ services:
       - HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxx
       - CPU_THREADS=12
       - MAX_WORKERS=2
+      - OMP_NUM_THREADS=12
     volumes:
       - hf_cache:/root/.cache/huggingface
     restart: unless-stopped
