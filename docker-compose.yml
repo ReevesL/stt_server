@@ -1,6 +1,6 @@
 services:
   stt-server:
-    image: ghcr.io/reevesl/stt_server:1.4.0
+    image: ghcr.io/reevesl/stt_server:1.4.1
     ports:
       - "8001:8000"
     environment:
@@ -15,10 +15,12 @@ services:
       - WEBHOOK_PASSWORD=
     volumes:
       - hf_cache:/root/.cache/huggingface
+      - torch_cache:/root/.cache/torch
       - transcripts:/app/transcripts
       - /mnt/stor3/stt_files:/mnt/stt_files
     restart: unless-stopped
 
 volumes:
   hf_cache:
+  torch_cache:
   transcripts:

@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Hosts
+
+- aionic: 192.168.1.98, SSH user `reeves`
+- TrueNAS: 192.168.1.149, SSH user `reeves`
+
 ## What this is
 
 A self-hosted speech-to-text server that runs WhisperX (Whisper large-v3 + wav2vec2 alignment + pyannote speaker diarization) as a FastAPI service in a GPU-accelerated Docker container. The target deployment host is aionic (aionic.little.local / 192.168.1.98), an Ubuntu server with an NVIDIA M40 24GB GPU.
