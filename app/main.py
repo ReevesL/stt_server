@@ -16,13 +16,11 @@ HF_TOKEN = os.environ["HF_TOKEN"]
 DEVICE = "cpu"
 COMPUTE_TYPE = "int8"
 
-CPU_THREADS = int(os.environ.get("CPU_THREADS", 0)) or None
-MAX_WORKERS = int(os.environ.get("MAX_WORKERS", 1))
+_omp_threads = int(os.environ.get("OMP_NUM_THREADS", 0))
+if _omp_threads:
+    torch.set_num_threads(_omp_threads)
 
-if CPU_THREADS:
-    torch.set_num_threads(CPU_THREADS)
-
-executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
+executor = ThreadPoolExecutor(max_workers=2)
 jobs: dict[str, dict] = {}
 job_queue: asyncio.Queue = None
 
