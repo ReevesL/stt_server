@@ -239,6 +239,7 @@ async def job_worker():
     while True:
         job_id, audio_path, original_filename, min_speakers, max_speakers = await job_queue.get()
         jobs[job_id]["status"] = "processing"
+        jobs[job_id]["started_at"] = time.time()
         started_at = datetime.utcnow().isoformat()
         try:
             fn = functools.partial(run_whisperx, audio_path, min_speakers, max_speakers)
@@ -333,7 +334,12 @@ async def transcribe(
 def get_job(job_id: str):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job not found")
-    return jobs[job_id]
+    job = dict(jobs[job_id])
+    if job["status"] == "processing" and "started_at" in job:
+        elapsed = int(time.time() - job["started_at"])
+        job["elapsed"] = f"{elapsed // 60}m {elapsed % 60}s"
+    job.pop("started_at", None)
+    return job
 
 
 @app.get("/jobs")
