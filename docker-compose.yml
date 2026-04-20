@@ -9,6 +9,8 @@ services:
       - MAX_WORKERS=2
       - ARCHIVE_PATH=/mnt/stt_files
       - RETENTION_DAYS=2
+      - WEBHOOK_URL=
+      - WEBHOOK_ENABLED=false
     volumes:
       - hf_cache:/root/.cache/huggingface
       - transcripts:/app/transcripts
