@@ -17,6 +17,7 @@ from typing import Optional
 import torch
 import whisperx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 HF_TOKEN = os.environ["HF_TOKEN"]
 DEVICE = "cpu"
@@ -223,3 +224,45 @@ def get_job(job_id: str):
 @app.get("/jobs")
 def list_jobs():
     return {jid: {"status": j["status"], "filename": j.get("filename")} for jid, j in jobs.items()}
+
+
+class SpeakerMapping(BaseModel):
+    mapping: dict[str, str]
+
+
+@app.post("/jobs/{job_id}/apply-mapping")
+def apply_mapping(job_id: str, body: SpeakerMapping):
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if jobs[job_id]["status"] != "done":
+        raise HTTPException(status_code=400, detail="Job is not complete")
+
+    job_dir = LOCAL_TRANSCRIPT_PATH / job_id
+    txt_files = list(job_dir.glob("*.txt"))
+    if not txt_files:
+        raise HTTPException(status_code=404, detail="Transcript file not found")
+
+    txt_path = txt_files[0]
+    stem = txt_path.stem
+    text = txt_path.read_text(encoding="utf-8")
+
+    for speaker_id, name in body.mapping.items():
+        text = text.replace(speaker_id, name)
+
+    txt_path.write_text(text, encoding="utf-8")
+
+    seg_file = job_dir / f"{stem}_segments.json"
+    log_file = job_dir / f"{stem}.log"
+    zip_path = job_dir / f"{stem}.zip"
+
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.write(txt_path, txt_path.name)
+        if seg_file.exists():
+            zf.write(seg_file, seg_file.name)
+        if log_file.exists():
+            zf.write(log_file, log_file.name)
+
+    if ARCHIVE_PATH:
+        shutil.copy2(zip_path, Path(ARCHIVE_PATH) / zip_path.name)
+
+    return {"status": "ok", "applied": body.mapping}
