@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import torch
 import whisperx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -31,6 +32,8 @@ MAX_WORKERS = int(os.environ.get("MAX_WORKERS", 1))
 ARCHIVE_PATH = os.environ.get("ARCHIVE_PATH")
 LOCAL_TRANSCRIPT_PATH = Path(os.environ.get("LOCAL_TRANSCRIPT_PATH", "/app/transcripts"))
 RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", 2))
+ENROLLMENT_THRESHOLD = float(os.environ.get("ENROLLMENT_THRESHOLD", "0.75"))
+WHISPER_SAMPLE_RATE = 16000
 
 LOCAL_TRANSCRIPT_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -38,18 +41,123 @@ executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
 jobs: dict[str, dict] = {}
 job_queue: asyncio.Queue = None
 
+_embedding_inference = None
 
-def build_transcript_text(segments: list) -> str:
-    speakers = sorted({seg.get("speaker", "UNKNOWN") for seg in segments if seg.get("speaker")})
-    lines = ["UNMAPPED SPEAKERS"]
-    for sp in speakers:
-        lines.append(f"  {sp}: ")
-    lines.append("")
+
+def get_embedding_inference():
+    global _embedding_inference
+    if _embedding_inference is None:
+        from pyannote.audio import Model, Inference
+        model = Model.from_pretrained(
+            "pyannote/wespeaker-voxceleb-resnet34-LM", use_auth_token=HF_TOKEN
+        )
+        _embedding_inference = Inference(model, window="whole")
+    return _embedding_inference
+
+
+def speakers_file_path() -> Path:
+    base = Path(ARCHIVE_PATH) if ARCHIVE_PATH else LOCAL_TRANSCRIPT_PATH
+    return base / "speakers.json"
+
+
+def load_speakers() -> dict:
+    p = speakers_file_path()
+    if p.exists():
+        return json.loads(p.read_text())
+    return {}
+
+
+def save_speakers(speakers: dict):
+    p = speakers_file_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(speakers, indent=2))
+
+
+def cosine_similarity(a: list, b: list) -> float:
+    va = np.array(a)
+    vb = np.array(b)
+    denom = np.linalg.norm(va) * np.linalg.norm(vb)
+    if denom == 0:
+        return 0.0
+    return float(np.dot(va, vb) / denom)
+
+
+def extract_embedding_from_audio(audio: np.ndarray) -> list:
+    inference = get_embedding_inference()
+    waveform = torch.FloatTensor(audio).unsqueeze(0)
+    embedding = inference({"waveform": waveform, "sample_rate": WHISPER_SAMPLE_RATE})
+    return embedding.flatten().tolist()
+
+
+def identify_speakers(segments: list, audio: np.ndarray) -> tuple[list, dict]:
+    speakers_db = load_speakers()
+    if not speakers_db:
+        return segments, {}
+
+    unique_speakers = {seg.get("speaker") for seg in segments if seg.get("speaker")}
+    speaker_mapping = {}
+
+    for speaker_id in unique_speakers:
+        speaker_segs = [s for s in segments if s.get("speaker") == speaker_id]
+        embeddings = []
+        for seg in speaker_segs:
+            start = int(seg["start"] * WHISPER_SAMPLE_RATE)
+            end = int(seg["end"] * WHISPER_SAMPLE_RATE)
+            clip = audio[start:end]
+            if len(clip) < WHISPER_SAMPLE_RATE:
+                continue
+            try:
+                embeddings.append(extract_embedding_from_audio(clip))
+            except Exception:
+                continue
+
+        if not embeddings:
+            continue
+
+        centroid = np.mean(embeddings, axis=0).tolist()
+        best_name, best_score = None, 0.0
+        for name, data in speakers_db.items():
+            score = cosine_similarity(centroid, data["embedding"])
+            if score > best_score:
+                best_score = score
+                best_name = name
+
+        if best_name and best_score >= ENROLLMENT_THRESHOLD:
+            speaker_mapping[speaker_id] = best_name
+
+    if speaker_mapping:
+        for seg in segments:
+            if seg.get("speaker") in speaker_mapping:
+                seg["speaker"] = speaker_mapping[seg["speaker"]]
+            if "words" in seg:
+                for word in seg["words"]:
+                    if word.get("speaker") in speaker_mapping:
+                        word["speaker"] = speaker_mapping[word["speaker"]]
+
+    return segments, speaker_mapping
+
+
+def build_transcript_text(segments: list, identified: set = None) -> str:
+    identified = identified or set()
+    unmapped = sorted({
+        seg.get("speaker", "UNKNOWN")
+        for seg in segments
+        if seg.get("speaker") and seg.get("speaker") not in identified
+    })
+
+    lines = []
+    if unmapped:
+        lines.append("UNMAPPED SPEAKERS")
+        for sp in unmapped:
+            lines.append(f"  {sp}: ")
+        lines.append("")
+
     for seg in segments:
         speaker = seg.get("speaker", "UNKNOWN")
         text = seg["text"].strip()
         start = seg["start"]
         lines.append(f"[{speaker} {start:.1f}s] {text}")
+
     return "\n".join(lines)
 
 
@@ -103,6 +211,9 @@ def run_whisperx(audio_path: str, min_speakers: Optional[int], max_speakers: Opt
     diarize_segments = diarize_model(audio, **diarize_kwargs)
     result = whisperx.diarize.assign_word_speakers(diarize_segments, result)
 
+    segments, speaker_mapping = identify_speakers(result["segments"], audio)
+    result["segments"] = segments
+    result["_speaker_mapping"] = speaker_mapping
     result["_processing_seconds"] = time.time() - start_time
     return result
 
@@ -134,7 +245,9 @@ async def job_worker():
             result = await loop.run_in_executor(executor, fn)
 
             elapsed = result.pop("_processing_seconds", 0)
-            transcript_text = build_transcript_text(result["segments"])
+            speaker_mapping = result.pop("_speaker_mapping", {})
+            identified_names = set(speaker_mapping.values())
+            transcript_text = build_transcript_text(result["segments"], identified=identified_names)
             stem = Path(original_filename).stem if original_filename else job_id
             speakers_detected = len({seg.get("speaker") for seg in result["segments"] if seg.get("speaker")})
 
@@ -147,6 +260,7 @@ async def job_worker():
                 "device": DEVICE,
                 "compute_type": COMPUTE_TYPE,
                 "speakers_detected": speakers_detected,
+                "speakers_identified": json.dumps(speaker_mapping) if speaker_mapping else "none",
                 "segments": len(result["segments"]),
             }
 
@@ -159,6 +273,7 @@ async def job_worker():
                 "text": transcript_text,
                 "processing_time": f"{elapsed:.1f}s",
                 "speakers_detected": speakers_detected,
+                "speakers_identified": speaker_mapping,
                 "files": str(job_dir),
             }
         except Exception as e:
@@ -266,3 +381,48 @@ def apply_mapping(job_id: str, body: SpeakerMapping):
         shutil.copy2(zip_path, Path(ARCHIVE_PATH) / zip_path.name)
 
     return {"status": "ok", "applied": body.mapping}
+
+
+@app.post("/enroll")
+async def enroll(file: UploadFile = File(...), name: str = Form(...)):
+    suffix = os.path.splitext(file.filename or "")[1] or ".audio"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        content = await file.read()
+        tmp.write(content)
+        tmp.close()
+
+        loop = asyncio.get_event_loop()
+        audio = await loop.run_in_executor(None, whisperx.load_audio, tmp.name)
+        embedding = await loop.run_in_executor(None, extract_embedding_from_audio, audio)
+    finally:
+        if os.path.exists(tmp.name):
+            os.unlink(tmp.name)
+
+    speakers = load_speakers()
+    speakers[name] = {
+        "embedding": embedding,
+        "enrolled_at": datetime.utcnow().isoformat(),
+    }
+    save_speakers(speakers)
+
+    return {"status": "enrolled", "name": name}
+
+
+@app.delete("/speakers/{name}")
+def delete_speaker(name: str):
+    speakers = load_speakers()
+    if name not in speakers:
+        raise HTTPException(status_code=404, detail="Speaker not found")
+    del speakers[name]
+    save_speakers(speakers)
+    return {"status": "removed", "name": name}
+
+
+@app.get("/speakers")
+def list_speakers():
+    speakers = load_speakers()
+    return {
+        name: {"enrolled_at": data.get("enrolled_at")}
+        for name, data in speakers.items()
+    }
