@@ -328,7 +328,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="STT Server", lifespan=lifespan)
 
 
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 
 
 @app.get("/version")

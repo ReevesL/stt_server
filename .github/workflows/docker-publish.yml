@@ -88,6 +88,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Extract version
+        id: version
+        run: echo "version=$(grep '^VERSION' app/main.py | cut -d'"' -f2)" >> $GITHUB_OUTPUT
+
       - name: Build and push app image
         uses: docker/build-push-action@v6
         with:
@@ -95,6 +99,6 @@ jobs:
           push: true
           tags: |
             ghcr.io/reevesl/stt_server:latest
-            ghcr.io/reevesl/stt_server:${{ github.sha }}
+            ghcr.io/reevesl/stt_server:${{ steps.version.outputs.version }}
           cache-from: type=registry,ref=ghcr.io/reevesl/stt_server:buildcache-app
           cache-to: type=registry,ref=ghcr.io/reevesl/stt_server:buildcache-app,mode=max
