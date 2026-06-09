@@ -20,3 +20,6 @@ logs/
 
 # transcripts
 meeting_transcriptions/
+
+# local scratch files
+local/
