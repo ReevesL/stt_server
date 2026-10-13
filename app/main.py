@@ -25,10 +25,12 @@ from pydantic import BaseModel
 HF_TOKEN = os.environ["HF_TOKEN"]
 DEVICE = "cpu"
 COMPUTE_TYPE = "int8"
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "large-v3-turbo")
 
 _omp_threads = int(os.environ.get("OMP_NUM_THREADS", 0))
 if _omp_threads:
     torch.set_num_threads(_omp_threads)
+WHISPER_THREADS = _omp_threads or os.cpu_count()
 
 MAX_WORKERS = int(os.environ.get("MAX_WORKERS", 1))
 ARCHIVE_PATH = os.environ.get("ARCHIVE_PATH")
@@ -200,7 +202,7 @@ def write_job_files(job_id: str, stem: str, transcript_text: str, segments: list
 def run_whisperx(audio_path: str, min_speakers: Optional[int], max_speakers: Optional[int]) -> dict:
     start_time = time.time()
 
-    model = whisperx.load_model("large-v3", DEVICE, compute_type=COMPUTE_TYPE)
+    model = whisperx.load_model(WHISPER_MODEL, DEVICE, compute_type=COMPUTE_TYPE, threads=WHISPER_THREADS)
     audio = whisperx.load_audio(audio_path)
     result = model.transcribe(audio, batch_size=16)
     del model
@@ -285,6 +287,8 @@ async def job_worker():
                 "processing_time": f"{elapsed:.1f}s",
                 "device": DEVICE,
                 "compute_type": COMPUTE_TYPE,
+                "model": WHISPER_MODEL,
+                "threads": WHISPER_THREADS,
                 "speakers_detected": speakers_detected,
                 "speakers_identified": json.dumps(speaker_mapping) if speaker_mapping else "none",
                 "segments": len(result["segments"]),
@@ -344,7 +348,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="STT Server", lifespan=lifespan)
 
 
-VERSION = "1.4.1"
+VERSION = "1.5.0"
 
 
 @app.get("/version")
