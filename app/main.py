@@ -6,6 +6,7 @@ import os
 import shutil
 import tempfile
 import time
+import unicodedata
 import uuid
 import zipfile
 from contextlib import asynccontextmanager
@@ -27,10 +28,8 @@ DEVICE = "cpu"
 COMPUTE_TYPE = "int8"
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "large-v3-turbo")
 
-_omp_threads = int(os.environ.get("OMP_NUM_THREADS", 0))
-if _omp_threads:
-    torch.set_num_threads(_omp_threads)
-WHISPER_THREADS = _omp_threads or os.cpu_count()
+WHISPER_THREADS = int(os.environ.get("OMP_NUM_THREADS", 14))
+torch.set_num_threads(WHISPER_THREADS)
 
 MAX_WORKERS = int(os.environ.get("MAX_WORKERS", 1))
 ARCHIVE_PATH = os.environ.get("ARCHIVE_PATH")
@@ -199,6 +198,10 @@ def write_job_files(job_id: str, stem: str, transcript_text: str, segments: list
     return job_dir
 
 
+def strip_accents(name: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.combining(c))
+
+
 def run_whisperx(audio_path: str, min_speakers: Optional[int], max_speakers: Optional[int]) -> dict:
     start_time = time.time()
 
@@ -274,7 +277,7 @@ async def job_worker():
             speaker_mapping = result.pop("_speaker_mapping", {})
             identified_names = set(speaker_mapping.values())
             transcript_text = build_transcript_text(result["segments"], identified=identified_names)
-            stem = Path(original_filename).stem if original_filename else job_id
+            stem = strip_accents(Path(original_filename).stem) if original_filename else job_id
             all_speaker_ids = sorted({seg.get("speaker") for seg in result["segments"] if seg.get("speaker")})
             speakers_detected = len(all_speaker_ids)
             speaker_map = {sp: speaker_mapping.get(sp, sp) for sp in all_speaker_ids}
@@ -348,7 +351,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="STT Server", lifespan=lifespan)
 
 
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 
 
 @app.get("/version")

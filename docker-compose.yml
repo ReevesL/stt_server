@@ -1,12 +1,12 @@
 services:
   stt-server:
-    image: ghcr.io/reevesl/stt_server:1.5.0
+    image: ghcr.io/reevesl/stt_server:1.5.1
     ports:
       - "8001:8000"
     environment:
       - HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxx
-      - OMP_NUM_THREADS=12
-      - MAX_WORKERS=2
+      - OMP_NUM_THREADS=14
+      - MAX_WORKERS=1
       - ARCHIVE_PATH=/mnt/stt_files
       - RETENTION_DAYS=2
       - WEBHOOK_URL=

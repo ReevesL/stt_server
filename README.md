@@ -28,7 +28,7 @@ Edit `docker-compose.yml` before deploying. All settings live in the `environmen
 | Variable | Default | Description |
 |---|---|---|
 | `HF_TOKEN` | required | Your Hugging Face token |
-| `OMP_NUM_THREADS` | all cores | CPU threads for Whisper and diarization. Set to roughly half your available cores to leave headroom for other services. |
+| `OMP_NUM_THREADS` | `14` | CPU threads for Whisper and diarization. 24 threads caused CTranslate2 segfaults on a 48-core host; 18 worked but ran hot. |
 | `MAX_WORKERS` | `1` | Number of concurrent transcription jobs. `MAX_WORKERS x OMP_NUM_THREADS` should not exceed your core count. |
 | `ARCHIVE_PATH` | none | Path inside the container where completed ZIP archives are delivered. Mount your NAS share to this path (see below). |
 | `RETENTION_DAYS` | `2` | How many days to keep local transcript files before automatic cleanup. NAS archives are not affected. |

@@ -40,7 +40,7 @@ One required env var: `HF_TOKEN` -- a Hugging Face token with access to pyannote
 Optional tuning vars:
 
 - `WHISPER_MODEL` -- Whisper model name, default `large-v3-turbo`. Set to `large-v3` for maximum accuracy at several times the transcription cost.
-- `OMP_NUM_THREADS` -- CPU threads per job, used both for PyTorch (alignment, diarization) and passed as `threads` to faster-whisper. Unset means all cores. `MAX_WORKERS x OMP_NUM_THREADS` should not exceed the core count.
+- `OMP_NUM_THREADS` -- CPU threads per job, used both for PyTorch (alignment, diarization) and passed as `threads` to faster-whisper. Default 14. 24 crashed CTranslate2 4.8.3 with a segfault on NasGul; 18 worked but pushed core temps above 80C. `MAX_WORKERS x OMP_NUM_THREADS` should not exceed the core count.
 
 The HuggingFace model cache is mounted as a named volume (`hf_cache`) so models survive container restarts.
 
